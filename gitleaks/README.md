@@ -173,10 +173,10 @@ WRN leaks found: 4
 
 ### Test 2 — ✅ PASS: clean.env only
 
-To demonstrate a clean scan, scan only the clean directory:
+To demonstrate a clean scan, scan only the clean file (path is a positional argument in v8):
 
 ```powershell
-gitleaks dir --config gitleaks/.gitleaks.toml --source test-secrets/clean.env --verbose
+gitleaks dir --config gitleaks/.gitleaks.toml --verbose test-secrets/clean.env
 ```
 
 Or, if you want to scan the full repo after removing bad.env from git tracking temporarily:

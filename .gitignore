@@ -22,6 +22,11 @@
 #   *.secret               → IGNORED (secret files)
 # ==============================================================
 
+# ----- Gitleaks binary / tool installation directory -----
+# Downloaded with: Invoke-WebRequest + Expand-Archive
+# Not source code — should not be committed
+gitleaks_install/
+
 # ----- Common real-secret file patterns to ignore -----
 .env
 .env.*
