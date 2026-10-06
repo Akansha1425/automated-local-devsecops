@@ -1,0 +1,60 @@
+# ==============================================================
+# .gitignore — Root-level ignore rules for DevSecOps project
+# Member 1: Secret Detection Gate
+# ==============================================================
+#
+# DESIGN DECISION for test-secrets/:
+# -----------------------------------
+# We DO NOT ignore the entire test-secrets/ directory because
+# bad.env is intentionally tracked in Git so that Gitleaks can
+# scan the committed history and detect the fake secrets during
+# the demo.
+#
+# We DO ignore patterns that could catch accidental REAL secrets,
+# such as:
+#   *.local.env, *.secret, *.key, .env (root-level)
+#
+# This means:
+#   test-secrets/bad.env   → TRACKED (demo only, fake values)
+#   test-secrets/clean.env → TRACKED (safe, no secrets)
+#   .env                   → IGNORED (could contain real secrets)
+#   *.local.env            → IGNORED (developer overrides)
+#   *.secret               → IGNORED (secret files)
+# ==============================================================
+
+# ----- Common real-secret file patterns to ignore -----
+.env
+.env.*
+!.env.example      # Allow example templates
+
+*.secret
+*.secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.local.env
+
+# Gitleaks report output (generated files, not source)
+gitleaks-report.json
+gitleaks-report.sarif
+leaks.json
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
