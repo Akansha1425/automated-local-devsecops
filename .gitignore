@@ -45,6 +45,13 @@ gitleaks-report.json
 gitleaks-report.sarif
 leaks.json
 
+# Member 2: Trivy container scan reports & cache
+trivy-report.json
+trivy-report.sarif
+trivy-results.sarif
+.trivy/
+.trivy-cache/
+
 # OS and editor noise
 .DS_Store
 Thumbs.db

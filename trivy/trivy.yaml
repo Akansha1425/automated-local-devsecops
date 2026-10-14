@@ -1,0 +1,39 @@
+# ==============================================================================
+# trivy.yaml — Aqua Security Trivy Scan Configuration
+# Project: Automated Local DevSecOps — Secret Scanner & Image Guard
+# Module: Member 2 — Container Security (Docker + Trivy)
+# ==============================================================================
+# This configuration defines the security gate parameters for container images.
+# In accordance with the security policy, any HIGH or CRITICAL severity
+# vulnerability in OS packages or application dependencies will fail the gate.
+# ==============================================================================
+
+# Severity levels to report and enforce
+severity:
+  - HIGH
+  - CRITICAL
+
+# Return exit code 1 if vulnerabilities matching the severity threshold are found
+exit-code: 1
+
+# Default output formatting in terminal (can be overridden with --format json)
+format: table
+
+# Scanners to execute:
+# - vuln: Vulnerability scanner for operating system packages and language dependencies
+scan:
+  scanners:
+    - vuln
+
+# Scan both OS packages (e.g. Alpine apk, Debian dpkg) and language packages (pip, npm)
+vulnerability:
+  type:
+    - os
+    - library
+
+# Timeout for vulnerability database downloads and scanning
+timeout: 5m0s
+
+# Cache settings
+cache:
+  dir: .trivy-cache

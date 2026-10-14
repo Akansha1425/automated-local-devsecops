@@ -1,0 +1,136 @@
+# ==============================================================================
+# Container Security Gate Workflow
+# Project: Automated Local DevSecOps — Secret Scanner & Image Guard
+# Module: Member 2 — Container Security (Docker + Trivy)
+# Repository: Akansha1425/automated-local-devsecops
+# ==============================================================================
+# This workflow implements the downstream container security pipeline:
+# 1. Gate 1: Enforces Member 1's Gitleaks Secret Detection Gate.
+# 2. Gate 2: Builds the hardened sample image (devsecops-demo:local).
+# 3. Gate 3: Runs Aqua Security Trivy container scanner to detect HIGH/CRITICAL CVEs.
+# 4. Fails the pipeline if any vulnerability meets or exceeds the severity threshold.
+# ==============================================================================
+
+name: "Container Security Gate"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      skip-secret-gate:
+        description: "Bypass Gitleaks gate for independent container scanner demo (default: false)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  # ============================================================================
+  # Stage 1: Member 1 — Secret Security Gate (Prerequisite)
+  # ============================================================================
+  secret-scan-gate:
+    name: "Member 1: Gitleaks Gate"
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip-secret-gate }}
+    uses: ./.github/workflows/reusable-gitleaks.yml
+    permissions:
+      contents: read
+    with:
+      config-path: "gitleaks/.gitleaks.toml"
+      fetch-depth: 0
+      gitleaks-version: "8.21.2"
+      fail-on-leak: true
+    secrets: inherit
+
+  # ============================================================================
+  # Stage 2: Member 2 — Container Build & Trivy Image Vulnerability Scan
+  # ============================================================================
+  container-security:
+    name: "Member 2: Docker Build & Trivy Scan"
+    needs: [secret-scan-gate]
+    # Runs if secret-scan-gate succeeded, or if explicitly skipped during dispatch testing
+    if: |
+      always() &&
+      (
+        needs.secret-scan-gate.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' && inputs.skip-secret-gate == true)
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      # Step 1: Checkout repository
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Docker Buildx
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@v3
+
+      # Step 3: Build Docker Image
+      - name: "Build application image"
+        run: |
+          docker build -t devsecops-demo:local -f docker/Dockerfile .
+
+      # Step 4: Run Trivy Vulnerability Scanner (Table Output for Terminal logs)
+      - name: "Run Trivy Image Scan (Console Gate)"
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "devsecops-demo:local"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: false
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      # Step 5: Generate Machine-Readable JSON Report for Artifact Upload
+      - name: "Generate JSON Security Report"
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "devsecops-demo:local"
+          format: "json"
+          output: "trivy-report.json"
+          exit-code: "0" # Always generate full report file even if gate failed
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      # Step 6: Generate SARIF Report for GitHub Security Tab
+      - name: "Generate SARIF Report"
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "devsecops-demo:local"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          exit-code: "0"
+          vuln-type: "os,library"
+          severity: "HIGH,CRITICAL"
+
+      # Step 7: Upload Trivy JSON and SARIF Reports as Pipeline Artifacts
+      - name: "Upload Trivy Scan Artifacts"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "trivy-container-security-reports"
+          path: |
+            trivy-report.json
+            trivy-results.sarif
+          retention-days: 14
+
+      # Step 8: Upload SARIF to GitHub Code Scanning (if permissions and repo support)
+      - name: "Upload SARIF to GitHub Security Tab"
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: "trivy-results.sarif"

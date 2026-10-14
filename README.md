@@ -1,8 +1,11 @@
 # Automated Local DevSecOps — Secret Scanner & Image Guard
 
 ## Part 1: Member 1 — Secret Security Gate (Gitleaks)
+## Part 2: Member 2 — Container Security Gate (Docker + Trivy)
 
 [![Gitleaks](https://img.shields.io/badge/Security%20Gate-Gitleaks%20v8.21.2-blue.svg)](https://github.com/gitleaks/gitleaks)
+[![Trivy](https://img.shields.io/badge/Container%20Security-Aqua%20Trivy%20v0.75.0-blue.svg)](https://github.com/aquasecurity/trivy)
+[![Docker](https://img.shields.io/badge/Container-Docker%20Engine%20v29.7.2-2496ED.svg)](https://www.docker.com/)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions%20Reusable%20Workflow-green.svg)](https://github.com/Akansha1425/automated-local-devsecops)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20PowerShell%20%7C%20Ubuntu%20Runner-lightgrey.svg)]()
 
@@ -33,13 +36,13 @@ The DevSecOps project is divided across four specialized member modules:
 
 | Member | Module Focus | Core Tools | Status in this Repo |
 | :--- | :--- | :--- | :--- |
-| **Member 1 (This Repository)** | **Secret Security Gate** | **Gitleaks CLI (v8.21.2), Git, GitHub Actions** | **Implemented & Active** |
-| **Member 2** | Container Image Security | Docker, Trivy | Downstream module (vulnerability scanning for images) |
+| **Member 1** | **Secret Security Gate** | **Gitleaks CLI (v8.21.2), Git, GitHub Actions** | **Implemented & Active** |
+| **Member 2** | **Container Image Security** | **Docker Engine (v29.7.2), Aqua Trivy (v0.75.0)** | **Implemented & Active** |
 | **Member 3** | Kubernetes Security | Minikube, Kyverno | Downstream module (cluster admission policies) |
 | **Member 4** | CI/CD Pipeline & Alerts | GitHub Actions, Slack / Discord Webhooks | Downstream module (orchestration & alert dispatch) |
 
 > [!NOTE]
-> Member 1 delivers the secret detection gate. Docker/Trivy, Kubernetes/Kyverno, and webhook notification scripts belong to Members 2, 3, and 4 and are maintained in their respective stages.
+> Members 1 and 2 deliver the secret detection gate and container vulnerability security gate. Kubernetes/Kyverno (Member 3) and pipeline orchestration/alerts (Member 4) are downstream stages.
 
 ---
 
@@ -49,13 +52,19 @@ The DevSecOps project is divided across four specialized member modules:
 flowchart TD
     A[Developer Git Push / PR] --> B[GitHub Actions Runner]
     B --> C[Checkout Repository: fetch-depth: 0]
-    C --> D[Resolve Gitleaks Configuration: Local or Shared]
+    C --> D[Member 1: Resolve Gitleaks Configuration]
     D --> E[Execute Gitleaks Scanner]
     E --> F{Secrets Detected?}
     F -- Yes: Leaks Found --> G[Exit Code 1: Pipeline BLOCKED]
-    F -- No: Clean Scan --> H[Exit Code 0: Security Gate PASSED]
+    F -- No: Clean Scan --> H[Exit Code 0: Member 1 PASSED]
     G --> I[Developer Notified: Rotate & Purge Credentials]
-    H --> J[Next Pipeline Stage: Member 2 Container Scan]
+    H --> J[Member 2: Build Docker Image]
+    J --> K[Member 2: Trivy Container Vulnerability Scan]
+    K --> L{HIGH or CRITICAL CVEs?}
+    L -- Yes: Findings Detected --> M[Exit Code 1: Image BLOCKED]
+    L -- No: Clean Scan --> N[Exit Code 0: Member 2 PASSED]
+    M --> O[Developer Notified: Patch Base Image / Libs]
+    N --> P[Downstream: Member 3 Kubernetes Admission Gate]
 ```
 
 ---
@@ -63,23 +72,30 @@ flowchart TD
 ## 4. Repository Structure
 
 ```text
-gitleaks/
+automated-local-devsecops/
 ├── .github/
 │   └── workflows/
-│       ├── reusable-gitleaks.yml   # Reusable GitHub Actions workflow for any repo
-│       └── secret-scan.yml         # Local caller workflow for this repository
-├── .gitignore                      # Excludes binaries, artifacts, and real secret files
+│       ├── reusable-gitleaks.yml   # Reusable GitHub Actions workflow for secret scan
+│       ├── secret-scan.yml         # Member 1 caller workflow
+│       └── container-security.yml  # Member 2 Container Security Gate workflow
+├── .dockerignore                   # Excludes secrets, git history, and dev artifacts from image
+├── .gitignore                      # Excludes binaries, scan reports, and cache directories
+├── docker/                         # Member 2 Container Assets
+│   ├── Dockerfile                  # Hardened, pinned non-root container specification
+│   ├── .dockerignore               # Local build exclusions
+│   └── app.py                      # Minimal Python microservice with healthcheck
+├── trivy/                          # Member 2 Vulnerability Scanning
+│   ├── trivy.yaml                  # Trivy scan configuration (severity: HIGH,CRITICAL, exit-code: 1)
+│   └── README.md                   # In-depth Trivy scanning guide and CLI reference
 ├── docs/
-│   └── secret-scanning.md          # Extended technical and configuration guide
+│   ├── secret-scanning.md          # Member 1 technical and rules documentation
+│   ├── container-security.md       # Member 2 container threat model and hardening guide
+│   └── run-and-testing-guide.md    # Step-by-step commands, scenarios, and screenshot guide
 ├── gitleaks/
 │   ├── .gitleaks.toml              # Central detection rules (default + 3 custom rules)
-│   └── README.md                   # Module-specific documentation
+│   └── README.md                   # Member 1 module documentation
 ├── gitleaks_install/               # Local Windows binary extraction (git-ignored)
-│   ├── gitleaks.exe                # Gitleaks binary v8.21.2
-│   ├── gitleaks.zip                # Upstream zip archive
-│   ├── LICENSE                     # License file
-│   └── README.md                   # Upstream Gitleaks docs
-├── test-secrets/                   # Safe test fixtures
+├── test-secrets/                   # Member 1 Safe test fixtures
 │   ├── bad.env                     # Intentionally fake credentials (FAIL test fixture)
 │   └── clean.env                   # Harmless configuration (PASS test fixture)
 └── README.md                       # Root documentation (this file)
@@ -263,10 +279,10 @@ To commit and push the project changes to GitHub:
 git status
 
 # 2. Stage changes (README, workflows, documentation)
-git add README.md .github/ docs/secret-scanning.md gitleaks/README.md
+git add README.md .github/ docs/ gitleaks/ docker/ trivy/ .dockerignore .gitignore
 
 # 3. Commit with descriptive message
-git commit -m "feat(member1): complete Part 1 Secret Security Gate with reusable GitHub Actions workflow"
+git commit -m "feat(member1,member2): Secret and Container Security Gates active"
 
 # 4. Push to remote repository
 git push origin main
@@ -274,10 +290,120 @@ git push origin main
 
 ---
 
+---
+
 ## 9. Exit Code Contract for CI/CD
 
-| Exit Code | Result | Pipeline Meaning | Action Taken |
-| :---: | :---: | :--- | :--- |
-| **`0`** | **PASS** | No secrets detected in codebase or Git history | &check; Pipeline proceeds to Member 2 (Docker/Trivy) |
-| **`1`** | **FAIL** | One or more credentials detected | &cross; Pipeline halted immediately; PR merge blocked |
-| **`2`** | **ERROR** | Configuration error or invalid flags | &cross; Pipeline aborted; configuration must be corrected |
+| Stage | Exit Code | Result | Pipeline Meaning | Action Taken |
+| :--- | :---: | :---: | :--- | :--- |
+| **Member 1 (Gitleaks)** | **`0`** | **PASS** | No secrets detected in codebase or Git history | &check; Proceeds to Member 2 (Docker/Trivy) |
+| **Member 1 (Gitleaks)** | **`1`** | **FAIL** | One or more credentials detected | &cross; Pipeline halted; PR blocked |
+| **Member 2 (Trivy)** | **`0`** | **PASS** | 0 HIGH or CRITICAL CVEs in image | &check; Proceeds to Member 3 (Kubernetes) |
+| **Member 2 (Trivy)** | **`1`** | **FAIL** | One or more HIGH or CRITICAL CVEs detected | &cross; Pipeline halted; deployment blocked |
+| **Any Stage** | **`2`** | **ERROR** | Scanner runtime or configuration error | &cross; Pipeline fails safe |
+
+---
+
+## 10. Member 2: Container Security Gate (Docker + Trivy)
+
+### 10.1 Module Purpose
+Once code passes Member 1's Secret Security Gate, Member 2 builds the application container image and scans it for known Common Vulnerabilities and Exposures (CVEs) in both operating system packages (e.g., `musl`, `libcrypto`, `zlib`) and application dependencies.
+
+### 10.2 Exact Commands to Run (Windows PowerShell)
+
+All commands below should be executed from the repository root:
+
+#### Step 1: Verify Docker Desktop is Running
+```powershell
+docker --version
+docker info
+```
+
+#### Step 2: Build the Hardened Sample Image
+```powershell
+docker build -t devsecops-demo:local -f docker/Dockerfile .
+```
+*Expected Result:*
+Image `devsecops-demo:local` is built with non-root user `appuser` (UID 10001), pinned base `python:3.12.9-alpine3.21`, and content size ~17 MB.
+
+#### Step 3: Verify Container Execution & Healthcheck
+```powershell
+docker run -d --rm -p 8080:8080 --name test-demo devsecops-demo:local
+Invoke-RestMethod -Uri http://localhost:8080/status | ConvertTo-Json
+docker stop test-demo
+```
+*Expected Output:*
+```json
+{
+  "service": "automated-local-devsecops",
+  "module": "Member 2 — Container Security",
+  "version": "1.0.0",
+  "status": "healthy",
+  "non_root": true
+}
+```
+
+#### Step 4: Run Trivy Vulnerability Scan (PASS &check;)
+```powershell
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock `
+  aquasec/trivy:latest image `
+  --severity HIGH,CRITICAL `
+  --exit-code 1 `
+  devsecops-demo:local
+
+echo "Security Gate Exit Code: $LASTEXITCODE"
+```
+*Expected Output:*
+```text
+devsecops-demo:local (alpine 3.21.3)
+===================================
+Total: 0 (HIGH: 0, CRITICAL: 0)
+
+Security Gate Exit Code: 0
+```
+
+#### Step 5: Run Failing Test Scan Demonstration (FAIL &cross;)
+To test that Trivy properly detects vulnerabilities and returns Exit Code 1 on unpatched images:
+```powershell
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock `
+  aquasec/trivy:latest image `
+  --severity HIGH,CRITICAL `
+  --exit-code 1 `
+  python:3.8-slim-buster
+
+echo "Security Gate Exit Code: $LASTEXITCODE"
+```
+*Expected Result:*
+Trivy outputs detected CVEs in a terminal table and halts with:
+```text
+Security Gate Exit Code: 1
+```
+
+#### Step 6: Export Machine-Readable JSON Report
+```powershell
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock `
+  aquasec/trivy:latest image `
+  --severity HIGH,CRITICAL `
+  --format json `
+  devsecops-demo:local | Out-File -Encoding utf8 trivy-report.json
+```
+
+---
+
+## 11. Git Push Commands
+
+To commit and push Member 1 and Member 2 changes to GitHub:
+
+```powershell
+# 1. Review status
+git status
+
+# 2. Stage all implementation files
+git add .gitignore .dockerignore docker/ trivy/ docs/container-security.md .github/workflows/container-security.yml README.md
+
+# 3. Commit with standard conventional commit message
+git commit -m "feat(member2): implement Docker build and Aqua Trivy container security gate"
+
+# 4. Push to remote repository
+git push origin main
+```

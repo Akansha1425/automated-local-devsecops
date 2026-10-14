@@ -1,0 +1,53 @@
+# ==============================================================================
+# .dockerignore — DevSecOps Docker Build Context Exclusions
+# Project: Automated Local DevSecOps — Secret Scanner & Image Guard
+# Module: Member 2 — Container Security (Docker + Trivy)
+# ==============================================================================
+
+# Git internals and history
+.git/
+.gitignore
+
+# Member 1 fixtures and binaries (NEVER bake test or real secrets into images)
+test-secrets/
+gitleaks_install/
+gitleaks/
+.gitleaks.toml
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.secret
+*.key
+*.pem
+
+# Documentation and CI/CD
+docs/
+.github/
+README.md
+LICENSE
+
+# Trivy scanner configuration and generated reports
+trivy/
+trivy-report.json
+trivy-report.sarif
+gitleaks-report.json
+gitleaks-report.sarif
+leaks.json
+.trivy/
+
+# Python cache and virtualenvs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+
+# OS and IDE noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
