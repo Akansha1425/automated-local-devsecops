@@ -139,39 +139,52 @@ gitleaks git --config gitleaks/.gitleaks.toml --report-format csv --report-path 
 
 ---
 
-## Handoff to Member 4 (GitHub Actions Integration)
+## CI/CD Integration & Reusable GitHub Actions Workflow
 
-Member 4 needs to know:
+Member 1 provides a fully operational, centralized reusable workflow:
+- **Reusable Workflow:** `.github/workflows/reusable-gitleaks.yml`
+- **Caller Workflow:** `.github/workflows/secret-scan.yml`
 
-1. **Config file location:** `gitleaks/.gitleaks.toml`
-2. **Scan command:** `gitleaks git --config gitleaks/.gitleaks.toml --verbose`
-3. **Exit code contract:** 0 = pass, 1 = fail (secrets found)
-4. **Report format for GitHub:** `--report-format sarif --report-path gitleaks-report.sarif`
-5. **Official GitHub Action:** `gitleaks/gitleaks-action@v2` (handles installation automatically)
-
-### Suggested GitHub Actions step
+### Official GitHub Action Architecture
+The official `gitleaks/gitleaks-action@v2` (and `@v3`) configures its runtime behaviors via **Environment Variables (`env:`)**, not `with:` input parameters:
 
 ```yaml
-- name: "🔍 Secret Scan — Gitleaks (Member 1)"
-  id: gitleaks
+- name: "🔍 Secret Scan — Gitleaks"
   uses: gitleaks/gitleaks-action@v2
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  with:
-    config-path: gitleaks/.gitleaks.toml
+    GITLEAKS_CONFIG: gitleaks/.gitleaks.toml   # Custom config passed via GITLEAKS_CONFIG
+    GITLEAKS_VERSION: "8.21.2"
+    GITLEAKS_ENABLE_COMMENTS: "false"        # Prevents leaking secrets in PR comments
+    GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false" # Prevents leaking secrets in raw artifacts
+    GITLEAKS_ENABLE_SUMMARY: "true"
 ```
 
-If using the CLI instead of the Action:
+### How External Repositories Integrate Member 1's Workflow
+Any developer can invoke this security gate in their repository by creating `.github/workflows/secret-scan.yml`:
 
 ```yaml
-- name: "🔍 Secret Scan — Gitleaks (Member 1)"
-  run: |
-    gitleaks git \
-      --config gitleaks/.gitleaks.toml \
-      --verbose \
-      --report-format sarif \
-      --report-path gitleaks-report.sarif
-  # GitHub Actions automatically stops pipeline on non-zero exit
+name: Secret Security Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Run Gitleaks Security Gate
+    uses: Akansha1425/automated-local-devsecops/.github/workflows/reusable-gitleaks.yml@main
+    permissions:
+      contents: read
+    with:
+      fetch-depth: 0
+    secrets: inherit
 ```
 
 ---
@@ -179,10 +192,13 @@ If using the CLI instead of the Action:
 ## Common Issues and Fixes
 
 | Problem | Cause | Fix |
-|---------|-------|-----|
-| `gitleaks: command not found` | Not installed or not on PATH | Follow installation steps in README |
-| `no leaks found` when expecting leaks | File not committed to git | Run `git add` + `git commit` first |
+|---|---|---|
+| `gitleaks: command not found` | Not installed or not on PATH | Use `.\gitleaks_install\gitleaks.exe` or install via `winget install gitleaks` |
+| `no leaks found` when expecting leaks | File not committed to git | Run `git add` + `git commit` first (for git history scans) |
 | `config file not found` | Wrong `--config` path | Run from repo root, use `gitleaks/.gitleaks.toml` |
+| Action ignores `with: config-path` | `gitleaks-action` uses `env: GITLEAKS_CONFIG` | Pass configuration via `env: GITLEAKS_CONFIG` |
+| Shared config 404 in CI | Upstream repo private or wrong ref | Ensure `Akansha1425/automated-local-devsecops` is public and `config-ref` is valid |
+| Org repository fails CI | Gitleaks license needed for orgs | Acquire free or commercial license at gitleaks.io and set `GITLEAKS_LICENSE` secret |
 | Pre-commit hook doesn't run | Wrong line endings on Windows | Save hook as LF, not CRLF |
 | Too many false positives | Built-in rules too aggressive | Add `[rules.allowlist]` entries to `.gitleaks.toml` |
 
@@ -192,9 +208,12 @@ If using the CLI instead of the Action:
 
 - [x] No real credentials in this repository
 - [x] `test-secrets/bad.env` contains only obviously fake values
-- [x] `.gitignore` blocks real `.env` files
-- [x] Gitleaks config does not disable any detection rules
+- [x] `.gitignore` blocks real `.env` files and `gitleaks_install/`
+- [x] Gitleaks config does not disable any default detection rules
 - [x] Custom rules include allowlists for placeholder text
-- [x] Exit codes are documented for CI/CD handoff
-- [ ] (Member 4) GitHub Actions integration
-- [ ] (Member 4) Discord/Slack alert on failure
+- [x] Exit codes are documented (0 = clean, 1 = leaks found)
+- [x] Reusable GitHub Actions workflow implemented (`.github/workflows/reusable-gitleaks.yml`)
+- [x] Caller GitHub Actions workflow implemented (`.github/workflows/secret-scan.yml`)
+- [x] Secret exposure prevention configured (PR comments & artifact uploads disabled)
+- [ ] (Member 4) Discord/Slack alert integration on non-zero exit
+

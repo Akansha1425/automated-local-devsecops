@@ -1,0 +1,125 @@
+# ==============================================================================
+# Reusable Gitleaks Security Workflow
+# Project: Automated Local DevSecOps — Secret Scanner & Image Guard
+# Module: Member 1 — Secret Security Gate
+# Upstream Repository: Akansha1425/automated-local-devsecops
+# ==============================================================================
+# This reusable workflow allows any repository to enforce automated secret scanning
+# during push, pull request, and manual workflow dispatch events.
+#
+# Calling repositories can reference this workflow using:
+#   uses: Akansha1425/automated-local-devsecops/.github/workflows/reusable-gitleaks.yml@main
+# ==============================================================================
+
+name: "Reusable Gitleaks Secret Scan"
+
+on:
+  workflow_call:
+    inputs:
+      config-path:
+        description: "Path to a custom Gitleaks configuration file inside the calling repository. If left empty, the shared configuration from Akansha1425/automated-local-devsecops is used."
+        required: false
+        type: string
+        default: ""
+      config-ref:
+        description: "Git branch, tag, or commit SHA in Akansha1425/automated-local-devsecops from which to fetch the shared .gitleaks.toml when config-path is empty."
+        required: false
+        type: string
+        default: "main"
+      fetch-depth:
+        description: "Number of commits to fetch (0 = full commit history for comprehensive secret scanning, 1 = shallow clone of latest commit only)."
+        required: false
+        type: number
+        default: 0
+      gitleaks-version:
+        description: "Specific Gitleaks binary version to use (e.g., '8.21.2' or 'latest')."
+        required: false
+        type: string
+        default: "8.21.2"
+      fail-on-leak:
+        description: "Whether the workflow should fail when secrets are detected. Defaults to true to enforce the security gate."
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      GITLEAKS_LICENSE:
+        description: "Optional Gitleaks license key. Required only for GitHub Organization accounts, not personal accounts."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: "Gitleaks Secret Scan"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Step 1: Check out calling repository code and history
+      - name: "Checkout calling repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      # Step 2: Resolve Gitleaks configuration (local vs shared)
+      - name: "Resolve Gitleaks configuration"
+        id: resolve-config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_CONFIG="${{ inputs.config-path }}"
+
+          if [ -n "$INPUT_CONFIG" ]; then
+            if [ -f "$INPUT_CONFIG" ]; then
+              echo "Using specified configuration from caller repository: $INPUT_CONFIG"
+              echo "config_path=$INPUT_CONFIG" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::Specified config-path '$INPUT_CONFIG' was not found in the repository."
+              exit 1
+            fi
+          elif [ -f "gitleaks/.gitleaks.toml" ]; then
+            echo "Found local gitleaks/.gitleaks.toml in repository."
+            echo "config_path=gitleaks/.gitleaks.toml" >> "$GITHUB_OUTPUT"
+          elif [ -f ".gitleaks.toml" ]; then
+            echo "Found local .gitleaks.toml in repository root."
+            echo "config_path=.gitleaks.toml" >> "$GITHUB_OUTPUT"
+          else
+            echo "No local Gitleaks configuration found. Fetching shared configuration from Akansha1425/automated-local-devsecops..."
+            CONFIG_URL="https://raw.githubusercontent.com/Akansha1425/automated-local-devsecops/${{ inputs.config-ref }}/gitleaks/.gitleaks.toml"
+            echo "Shared config URL: $CONFIG_URL"
+
+            mkdir -p .gitleaks-shared
+            TARGET_FILE=".gitleaks-shared/.gitleaks.toml"
+
+            HTTP_STATUS=$(curl -sSL -w "%{http_code}" -o "$TARGET_FILE" "$CONFIG_URL")
+
+            if [ "$HTTP_STATUS" -ne 200 ]; then
+              echo "::error::Failed to download shared Gitleaks configuration from $CONFIG_URL (HTTP status: $HTTP_STATUS)."
+              exit 1
+            fi
+
+            if [ ! -s "$TARGET_FILE" ]; then
+              echo "::error::Downloaded shared Gitleaks configuration file is empty: $TARGET_FILE."
+              exit 1
+            fi
+
+            echo "Shared Gitleaks configuration successfully downloaded to $TARGET_FILE"
+            echo "config_path=$TARGET_FILE" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Step 3: Run Gitleaks secret detection
+      # Note: PR comments and unredacted artifact uploads are disabled to prevent exposing secrets.
+      - name: "Run Gitleaks secret detection"
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: ${{ !inputs.fail-on-leak }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_CONFIG: ${{ steps.resolve-config.outputs.config_path }}
+          GITLEAKS_VERSION: ${{ inputs.gitleaks-version }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"

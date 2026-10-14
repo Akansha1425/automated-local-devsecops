@@ -254,22 +254,23 @@ exit 0
 
 ---
 
-## CI/CD Integration (for Member 4)
+## CI/CD Integration (Member 1 Reusable Workflow)
 
-When Member 4 integrates this into GitHub Actions, the pipeline step will look like:
+Member 1 provides two centralized GitHub Actions workflows:
+- **Reusable Workflow:** [reusable-gitleaks.yml](file:///C:/Users/nikit/OneDrive/Pictures/Documents/gitleaks/.github/workflows/reusable-gitleaks.yml)
+- **Caller Workflow:** [secret-scan.yml](file:///C:/Users/nikit/OneDrive/Pictures/Documents/gitleaks/.github/workflows/secret-scan.yml)
+
+### Calling the Reusable Workflow
+Other repositories and team members (including Member 4's pipeline) can integrate Gitleaks with a simple job invocation:
 
 ```yaml
-# .github/workflows/devsecops.yml (to be created by Member 4)
-
-- name: Secret Scanning — Gitleaks
-  uses: gitleaks/gitleaks-action@v2
-  # OR use the CLI directly:
-  run: |
-    gitleaks git \
-      --config gitleaks/.gitleaks.toml \
-      --verbose \
-      --report-format sarif \
-      --report-path gitleaks-report.sarif
+jobs:
+  secret-scan:
+    uses: Akansha1425/automated-local-devsecops/.github/workflows/reusable-gitleaks.yml@main
+    permissions:
+      contents: read
+    with:
+      fetch-depth: 0
 ```
 
 **Pipeline behaviour:**
@@ -289,6 +290,7 @@ Deployment blocked
 ```
 
 The key point is: **Gitleaks' exit code does all the work.** GitHub Actions automatically stops the pipeline when any step returns a non-zero exit code.
+
 
 ---
 
