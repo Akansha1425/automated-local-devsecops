@@ -1,0 +1,21 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+spec:
+  validationActions:
+    - Deny
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: >-
+        (object.spec.containers
+        + object.spec.?initContainers.orValue([]))
+        .all(c, c.image.matches('^[^:]+(:[^:]+)?$')
+        && !c.image.endsWith(':latest')
+        && c.image.contains(':'))
+      message: "All container images must use an explicit version tag other than latest."
