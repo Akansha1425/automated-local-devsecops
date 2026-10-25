@@ -16,5 +16,7 @@ spec:
     - expression: >-
         (object.spec.containers
         + object.spec.?initContainers.orValue([]))
-        .all(c, c.image.startsWith('docker.io/'))
-      message: "Container images must come from the trusted docker.io registry."
+        .all(c, c.image == 'devsecops-demo:local'
+        || (c.image.matches('^docker[.]io/library/nginx:[0-9][A-Za-z0-9_.-]{0,127}$')
+        && !c.image.endsWith(':latest')))
+      message: "Container images must be devsecops-demo:local or a version-tagged image from the approved docker.io/library/nginx repository."
