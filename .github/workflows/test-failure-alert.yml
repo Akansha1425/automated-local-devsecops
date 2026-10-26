@@ -1,0 +1,16 @@
+name: Test Failure Alert
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulate-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate controlled test failure
+        run: |
+          echo "Testing failure-alert integration."
+          exit 1
