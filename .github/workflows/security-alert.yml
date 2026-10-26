@@ -42,17 +42,27 @@ jobs:
           import json
           import os
           import urllib.request
+          import urllib.error
 
           url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+
           if not url:
-              raise SystemExit("DISCORD_WEBHOOK_URL secret is missing")
+              raise SystemExit(
+                  "DISCORD_WEBHOOK_URL secret is missing"
+              )
 
           if os.environ["EVENT_NAME"] == "workflow_dispatch":
               workflow = "Manual Discord Alert Test"
               details = "Manual test triggered from GitHub Actions."
           else:
-              workflow = os.environ.get("FAILED_WORKFLOW") or "Container Security Gate"
-              details = os.environ.get("RUN_URL") or "See GitHub Actions run."
+              workflow = (
+                  os.environ.get("FAILED_WORKFLOW")
+                  or "Container Security Gate"
+              )
+              details = (
+                  os.environ.get("RUN_URL")
+                  or "See GitHub Actions run."
+              )
 
           payload = {
               "content": (
@@ -68,10 +78,33 @@ jobs:
           request = urllib.request.Request(
               url,
               data=json.dumps(payload).encode("utf-8"),
-              headers={"Content-Type": "application/json"},
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "DevSecOps-Security-Alert/1.0",
+              },
               method="POST",
           )
 
-          with urllib.request.urlopen(request, timeout=15) as response:
-              print("Discord alert sent. HTTP status:", response.status)
+          try:
+              with urllib.request.urlopen(
+                  request, timeout=15
+              ) as response:
+                  print(
+                      "Discord alert sent. HTTP status:",
+                      response.status
+                  )
+
+          except urllib.error.HTTPError as error:
+              print("Discord HTTP status:", error.code)
+              print(
+                  "Discord response:",
+                  error.read().decode(
+                      "utf-8", errors="replace"
+                  )
+              )
+              raise
+
+          except urllib.error.URLError as error:
+              print("Discord connection error:", error.reason)
+              raise
           PY
