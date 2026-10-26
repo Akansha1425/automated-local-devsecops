@@ -2,7 +2,7 @@ name: Security Failure Alert
 
 on:
   workflow_run:
-    workflows: ["Container Security Gate", "Test Failure Alert"]
+    workflows: ["Container Security Gate"]
     types: [completed]
   workflow_dispatch:
 
