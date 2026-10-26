@@ -407,3 +407,50 @@ git commit -m "feat(member2): implement Docker build and Aqua Trivy container se
 # 4. Push to remote repository
 git push origin main
 ```
+
+---
+
+## 12. Member 4: CI/CD Pipeline & Discord Security Alerts
+
+### 12.1 Purpose
+
+The Security Failure Alert workflow integrates GitHub Actions with Discord to notify the team when the `Container Security Gate` workflow fails. This improves visibility of security pipeline failures.
+
+### 12.2 Workflow Behaviour
+
+- **Trigger:** Runs when the `Container Security Gate` workflow completes.
+- **Failure notification:** Sends a Discord alert when the monitored workflow concludes with a failure.
+- **Successful run:** Skips the Discord notification when the monitored workflow succeeds.
+- **Manual test:** Supports `workflow_dispatch` to verify Discord webhook delivery.
+
+### 12.3 Discord Alert Configuration
+
+Configure the following repository secret in GitHub:
+
+- **Secret name:** `DISCORD_WEBHOOK_URL`
+- **Purpose:** Stores the Discord webhook URL securely for sending notifications.
+
+To configure it, open the repository's **Settings → Secrets and variables → Actions → New repository secret** and add the secret.
+
+**Security note:** Never commit the webhook URL to source code, README files, screenshots, or logs.
+
+### 12.4 Alert Contents
+
+The Discord notification includes:
+
+- Repository name
+- Failed workflow name
+- Failure status
+- GitHub Actions run URL
+- A `Deployment: BLOCKED` message for alert visibility
+
+The deployment message is informational; actual deployment blocking must be enforced and verified separately.
+
+### 12.5 Verification
+
+1. Open the repository's **Actions** tab.
+2. Select **Security Failure Alert**.
+3. Use **Run workflow** to test Discord webhook delivery manually.
+4. Confirm that the workflow completes successfully and the notification appears in the configured Discord channel.
+
+A controlled failure test was performed to verify that a failed monitored workflow triggers a Discord notification.
