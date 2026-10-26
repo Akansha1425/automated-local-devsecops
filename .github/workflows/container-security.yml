@@ -134,3 +134,86 @@ jobs:
         continue-on-error: true
         with:
           sarif_file: "trivy-results.sarif"
+
+  # ============================================================================
+  # Stage 3: Member 4 — Kubernetes + Kyverno Integration
+  # ============================================================================
+  kubernetes-verification:
+    name: "Member 4: Kubernetes Integration"
+    needs: [container-security]
+    if: needs.container-security.result == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start temporary Kubernetes cluster
+        uses: medyagh/setup-minikube@v0.0.21
+
+      - name: Install Kyverno
+        run: |
+          helm repo add kyverno https://kyverno.github.io/kyverno/
+          helm repo update
+          helm install kyverno kyverno/kyverno \
+            --namespace kyverno \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+      - name: Wait for Kyverno
+        run: |
+          kubectl wait --for=condition=Available \
+            deployment --all -n kyverno --timeout=180s
+
+      - name: Apply Member 3 Kyverno policies
+        run: |
+          kubectl apply -f k8s/policies/no-latest.yaml
+          kubectl apply -f k8s/policies/trusted-registry.yaml
+          sleep 10
+          kubectl get validatingpolicies
+
+      - name: Build image inside Minikube
+        run: |
+          minikube image build \
+            -t devsecops-demo:local \
+            -f docker/Dockerfile .
+
+      - name: Deploy application
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl rollout status deployment/secure-nginx \
+            --timeout=120s
+
+      - name: Verify deployment health
+        run: |
+          kubectl get deployment secure-nginx
+          kubectl get pods -l app=secure-nginx
+          kubectl get service secure-nginx-service
+
+      - name: Verify Kyverno rejects latest image
+        shell: bash
+        run: |
+          set +e
+          kubectl run invalid-latest-test \
+            --image=nginx:latest \
+            --restart=Never 2>&1 | tee rejection.log
+          result=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$result" -eq 0 ]; then
+            echo "ERROR: Kyverno did not reject nginx:latest"
+            kubectl delete pod invalid-latest-test --ignore-not-found
+            exit 1
+          fi
+
+          if ! grep -Eqi \
+            'disallow-latest-tag|trusted-registry-only|denied' \
+            rejection.log; then
+            echo "ERROR: Failure was not confirmed as a Kyverno policy rejection"
+            cat rejection.log
+            exit 1
+          fi
+
+          echo "PASS: Invalid image was rejected by policy."
