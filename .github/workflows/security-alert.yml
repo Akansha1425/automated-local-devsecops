@@ -1,0 +1,110 @@
+name: Security Failure Alert
+
+on:
+  workflow_run:
+    workflows: ["Container Security Gate"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check whether to send alert
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          elif [ "$CONCLUSION" = "failure" ]; then
+            echo "send=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "send=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Discord Alert
+        if: steps.check.outputs.send == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          FAILED_WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import urllib.error
+
+          url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+
+          if not url:
+              raise SystemExit(
+                  "DISCORD_WEBHOOK_URL secret is missing"
+              )
+
+          if os.environ["EVENT_NAME"] == "workflow_dispatch":
+              workflow = "Manual Discord Alert Test"
+              details = "Manual test triggered from GitHub Actions."
+          else:
+              workflow = (
+                  os.environ.get("FAILED_WORKFLOW")
+                  or "Container Security Gate"
+              )
+              details = (
+                  os.environ.get("RUN_URL")
+                  or "See GitHub Actions run."
+              )
+
+          payload = {
+              "content": (
+                  "SECURITY ALERT\n"
+                  f"Repository: {os.environ['REPOSITORY']}\n"
+                  f"Workflow: {workflow}\n"
+                  "Status: FAILED\n"
+                  f"Details: {details}\n"
+                  "Deployment: BLOCKED"
+              )
+          }
+
+          request = urllib.request.Request(
+              url,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "DevSecOps-Security-Alert/1.0",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(
+                  request, timeout=15
+              ) as response:
+                  print(
+                      "Discord alert sent. HTTP status:",
+                      response.status
+                  )
+
+          except urllib.error.HTTPError as error:
+              print("Discord HTTP status:", error.code)
+              print(
+                  "Discord response:",
+                  error.read().decode(
+                      "utf-8", errors="replace"
+                  )
+              )
+              raise
+
+          except urllib.error.URLError as error:
+              print("Discord connection error:", error.reason)
+              raise
+          PY
