@@ -410,6 +410,34 @@ git push origin main
 
 ---
 
+## Member 3 — Kubernetes Security (Minikube + Kyverno)
+
+`k8s/deployment.yaml` runs the Member 2 application image `devsecops-demo:local` with `imagePullPolicy: Never` and container port 8080. `k8s/service.yaml` exposes it internally on port 80 and forwards to port 8080.
+
+Kyverno admission policies in `k8s/policies/` enforce image controls on Pods:
+- `no-latest.yaml` requires explicitly tagged images other than `latest`.
+- `trusted-registry.yaml` allows the exact local demo image and version-tagged `docker.io/library/nginx` images; other image references are denied.
+
+Apply the policies before the workload resources from the repository root:
+
+```powershell
+kubectl apply -f k8s/policies/no-latest.yaml
+kubectl apply -f k8s/policies/trusted-registry.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+```
+
+Check policy readiness:
+
+```powershell
+kubectl get validatingpolicies
+```
+
+Recorded admission and health checks:
+- `nginx:latest` — denied.
+- `docker.io/library/nginx:1.28` — admitted.
+- `docker.io/library/nginx:latest` — denied.
+- The application `/health` endpoint returned `UP`.
 ## 12. Member 4: CI/CD Pipeline & Discord Security Alerts
 
 ### 12.1 Purpose

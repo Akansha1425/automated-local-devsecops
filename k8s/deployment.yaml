@@ -14,7 +14,8 @@ spec:
         app: secure-nginx
     spec:
       containers:
-        - name: nginx
-          image: docker.io/library/nginx:1.28
+        - name: app
+          image: devsecops-demo:local
+          imagePullPolicy: Never
           ports:
-            - containerPort: 80
+            - containerPort: 8080
